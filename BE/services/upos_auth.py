@@ -24,11 +24,17 @@ def login() -> str | None:
     try:
         resp = requests.post(
             config.UPOS_LOGIN_URL,
-            json={"username": config.UPOS_USERNAME, "password": config.UPOS_PASSWORD, "shop_id": config.UPOS_SHOP_ID},
+            json={"username": config.UPOS_USERNAME, "password": config.UPOS_PASSWORD},
             timeout=10,
         )
         if resp.status_code == 200:
             data = resp.json()
+            
+            # Cập nhật shop_id từ response để dùng về sau
+            shop_id = data.get("shop_id") or data.get("data", {}).get("shop_id")
+            if shop_id:
+                config.UPOS_SHOP_ID = str(shop_id)
+                
             # Xử lý cả hai cấu trúc phổ biến: data.access_token hoặc data.data.access_token
             token = (
                 data.get("access_token")

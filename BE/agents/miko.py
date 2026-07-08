@@ -20,7 +20,8 @@ Bạn là Miko, nhân viên bán hàng của shop UPOS. Bạn chỉ được nó
 [QUY TẮC BẮT BUỘC]
 1. Ngay khi khách hỏi về sản phẩm hoặc hỏi shop có bán mặt hàng nào đó không (ví dụ: 'có kem dưỡng ẩm không', 'muốn mua áo thun'), bạn phải LẬP TỨC trả về JSON hành động 'search_product' để hệ thống tra cứu. TUYỆT ĐỐI không chat tự do hứa hẹn hay đoán trước là shop có hàng.
 2. Bạn CHỈ được tư vấn sản phẩm dựa trên kết quả tìm kiếm thực tế do hệ thống trả về. Nếu hệ thống báo không tìm thấy, bạn phải lịch sự báo hết hàng hoặc shop chưa có. TUYỆT ĐỐI không tự bịa sản phẩm, mã số, hay giá cả.
-3. Tuyệt đối KHÔNG hỏi khách về màu sắc/kích cỡ (size) đối với các mặt hàng không có các thuộc tính này (ví dụ: mỹ phẩm, kem dưỡng ẩm, thực phẩm...). Chỉ hỏi size/màu khi khách mua quần áo, giày dép.
+3. Tuyệt đối KHÔNG hỏi khách về màu sắc/kích cỡ (size) đối với các mặt hàng không có các thuộc tính này.
+4. Khi khách hỏi về đơn hàng họ đã đặt, hãy tìm trong lịch sử hội thoại xem có mã đơn hàng (Mã đơn: ...) không và báo lại cho khách. LƯU Ý: SĐT và Địa chỉ mà khách cung cấp là của KHÁCH HÀNG, tuyệt đối KHÔNG lấy đó làm thông tin liên hệ của shop để kêu khách gọi tới.
 
 [ĐỊNH DẠNG ĐẦU RA (OUTPUT FORMAT)]
 - Chế độ 1 (Nói chuyện tự do): Trả lời bằng văn bản tự nhiên theo Persona của Miko (dạ, ạ, vâng, nha...).
@@ -62,6 +63,7 @@ def get_hint(message: str) -> str:
     msg_lower = message.lower().strip()
     greetings = ["chào", "hello", "hi", "alo", "helo", "heyy"]
     checkout_keywords = ["địa chỉ", "sđt", "số điện thoại", "giao tới", "ship", "chốt mua", "đặt mua", "chốt đơn"]
+    order_inquiry_keywords = ["đơn", "order", "mã", "thông tin", "đã đặt"]
     has_phone = bool(re.search(r"\b0[3-9]\d{8}\b", msg_lower))
 
     # 1. Chào hỏi ngắn
@@ -78,7 +80,11 @@ def get_hint(message: str) -> str:
     if any(kw in msg_lower for kw in buy_intent_keywords):
         return " (Hãy trò chuyện tự do ở Chế độ 1 để cám ơn khách và lịch sự xin thông tin giao hàng bao gồm họ tên, SĐT, địa chỉ để lên đơn. Tuyệt đối không gọi search_product ở lượt này)"
 
-    # 4. Tìm kiếm sản phẩm thông thường
+    # 4. Khách hỏi về thông tin đơn hàng đã đặt
+    if any(kw in msg_lower for kw in order_inquiry_keywords):
+        return " (BẮT BUỘC: Khách đang hỏi về đơn hàng. Hãy trò chuyện tự do ở Chế độ 1, xem lại lịch sử hội thoại để cung cấp thông tin mã đơn hàng, sản phẩm đã đặt. Tuyệt đối KHÔNG gọi search_product ở lượt này)"
+
+    # 5. Tìm kiếm sản phẩm thông thường
     return " (BẮT BUỘC: Vì đây là câu hỏi tìm kiếm mặt hàng/sản phẩm, bạn phải trả về DUY NHẤT một khối JSON 'search_product' để tra cứu kho. Tuyệt đối không chat tự do ở lượt này)"
 
 

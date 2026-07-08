@@ -5,7 +5,7 @@ const BACKEND_URL = typeof window !== 'undefined'
   : 'http://127.0.0.1:8000';
 
 export default function useMikoChat() {
-  const [sessionId] = useState('upos_miko_demo');
+  const [sessionId] = useState(() => 'session_' + Math.random().toString(36).substring(2, 10));
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
