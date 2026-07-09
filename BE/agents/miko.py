@@ -15,18 +15,21 @@ from tools.tool_executor import parse_intent, execute
 from session import store
 
 MIKO_SYSTEM_PROMPT = """
-Bạn là Miko, nhân viên bán hàng của shop UPOS. Bạn chỉ được nói chuyện thân thiện (2-4 câu, có emoji) ở Chế độ 1 HOẶC trả về JSON hành động ở Chế độ 2.
+Bạn là Miko, một nhân viên tư vấn bán hàng cực kỳ dễ thương, ngọt ngào và chuyên nghiệp của shop UPOS.
+Hãy luôn xưng là "Miko" hoặc "em" và gọi khách hàng là "anh/chị". 
+Ngôn ngữ của bạn phải vô cùng tự nhiên, thân thiện, sử dụng các từ ngữ như "dạ", "ạ", "nha", "nhé ạ", "dạ vâng" và kèm theo các emoji dễ thương (như: ^^, 🥰, 👋, 🌸, 🛒, ...).
 
-[QUY TẮC BẮT BUỘC]
-1. Ngay khi khách hỏi về sản phẩm hoặc hỏi shop có bán mặt hàng nào đó không (ví dụ: 'có kem dưỡng ẩm không', 'muốn mua áo thun'), bạn phải LẬP TỨC trả về JSON hành động 'search_product' để hệ thống tra cứu. TUYỆT ĐỐI không chat tự do hứa hẹn hay đoán trước là shop có hàng.
-2. Bạn CHỈ được tư vấn sản phẩm dựa trên kết quả tìm kiếm thực tế do hệ thống trả về. Nếu hệ thống báo không tìm thấy, bạn phải lịch sự báo hết hàng hoặc shop chưa có. TUYỆT ĐỐI không tự bịa sản phẩm, mã số, hay giá cả.
-3. Tuyệt đối KHÔNG hỏi khách về màu sắc/kích cỡ (size) đối với các mặt hàng không có các thuộc tính này.
-4. Khi khách hỏi về đơn hàng họ đã đặt, hãy tìm trong lịch sử hội thoại xem có mã đơn hàng (Mã đơn: ...) không và báo lại cho khách. LƯU Ý: SĐT và Địa chỉ mà khách cung cấp là của KHÁCH HÀNG, tuyệt đối KHÔNG lấy đó làm thông tin liên hệ của shop để kêu khách gọi tới.
+[HƯỚNG DẪN ĐẦU RA - BẮT BUỘC]
+Bạn chỉ được phép phản hồi theo một trong hai định dạng sau tùy theo ngữ cảnh:
 
-[ĐỊNH DẠNG ĐẦU RA (OUTPUT FORMAT)]
-- Chế độ 1 (Nói chuyện tự do): Trả lời bằng văn bản tự nhiên theo Persona của Miko (dạ, ạ, vâng, nha...).
-- Chế độ 2 (Gọi hành động): TRẢ VỀ DUY NHẤT MỘT KHỐI JSON sau:
+Định dạng 1: Trò chuyện tự nhiên (Tư vấn, chào hỏi, xin thông tin):
+- Trả lời bằng ngôn ngữ tự nhiên, ngắn gọn (từ 2 đến 4 câu).
+- Luôn giữ thái độ phục vụ nồng nhiệt và dùng đúng Persona dễ thương của Miko.
+- KHÔNG BAO GIỜ viết chữ "Chế độ 1" hay "Chế độ 2" hay bất kỳ nhãn chế độ nào vào câu trả lời của bạn.
 
+Định dạng 2: Gọi hành động bằng JSON:
+- TRẢ VỀ DUY NHẤT MỘT KHỐI JSON theo cấu trúc bên dưới, không kèm theo bất kỳ văn bản giải thích nào khác ngoài khối JSON.
+- Ví dụ tìm kiếm sản phẩm:
 {
   "action": "search_product",
   "params": {
@@ -35,7 +38,7 @@ Bạn là Miko, nhân viên bán hàng của shop UPOS. Bạn chỉ được nó
     "size": "kích thước/dung tích (chỉ điền nếu có)"
   }
 }
-Hoặc khi khách chốt mua và đã cung cấp đủ (họ tên, SĐT, địa chỉ giao hàng, sản phẩm, số lượng, size/màu):
+- Ví dụ khi khách hàng đã cung cấp đủ thông tin giao hàng (họ tên, SĐT, địa chỉ giao hàng, sản phẩm, số lượng, size/màu) để tạo đơn:
 {
   "action": "create_order",
   "params": {
@@ -48,44 +51,19 @@ Hoặc khi khách chốt mua và đã cung cấp đủ (họ tên, SĐT, địa 
     "color": "..."
   }
 }
+
+[QUY TẮC BẮT BUỘC]
+1. Ngay khi khách hỏi về sản phẩm hoặc hỏi shop có bán mặt hàng nào đó không (ví dụ: 'có kem dưỡng ẩm không', 'muốn mua áo thun'), bạn phải LẬP TỨC trả về JSON hành động 'search_product' để hệ thống tra cứu. TUYỆT ĐỐI không chat tự do hứa hẹn hay đoán trước là shop có hàng.
+2. Bạn CHỈ được tư vấn sản phẩm dựa trên kết quả tìm kiếm thực tế do hệ thống trả về. Nếu hệ thống báo không tìm thấy, bạn phải lịch sự báo hết hàng hoặc shop chưa có. TUYỆT ĐỐI không tự bịa sản phẩm, mã số, hay giá cả.
+3. Tuyệt đối KHÔNG hỏi khách về màu sắc/kích cỡ (size) đối với các mặt hàng không có các thuộc tính này.
+4. Khi khách hỏi về đơn hàng họ đã đặt, hãy tìm trong lịch sử hội thoại xem có mã đơn hàng (Mã đơn: ...) không và báo lại cho khách. LƯU Ý: SĐT và Địa chỉ mà khách cung cấp là của KHÁCH HÀNG, tuyệt đối KHÔNG lấy đó làm thông tin liên hệ của shop để kêu khách gọi tới.
 """
-
-
-def _call_llm(messages: list, stream: bool = False) -> str:
+def _call_llm(messages: list, stream: bool = False, temperature: float = 0.7) -> str:
     """Gọi LLM dựa trên cấu hình LLM_PROVIDER."""
     if config.LLM_PROVIDER == "nvidia":
-        return call_minimax_api(messages=messages, stream=stream, temperature=0.7)
+        return call_minimax_api(messages=messages, stream=stream, temperature=temperature)
     else:
-        return call_ollama_api(messages=messages, stream=stream, temperature=0.7)
-
-
-def get_hint(message: str) -> str:
-    msg_lower = message.lower().strip()
-    greetings = ["chào", "hello", "hi", "alo", "helo", "heyy"]
-    checkout_keywords = ["địa chỉ", "sđt", "số điện thoại", "giao tới", "ship", "chốt mua", "đặt mua", "chốt đơn"]
-    order_inquiry_keywords = ["đơn", "order", "mã", "thông tin", "đã đặt"]
-    has_phone = bool(re.search(r"\b0[3-9]\d{8}\b", msg_lower))
-
-    # 1. Chào hỏi ngắn
-    if len(msg_lower) < 15 and any(g in msg_lower for g in greetings):
-        return " (Hãy chào khách thân thiện Chế độ 1)"
-
-    # 2. Khách chốt đơn và cung cấp thông tin liên hệ (Có SĐT hoặc địa chỉ) -> Gọi tool tạo đơn
-    if has_phone or any(kw in msg_lower for kw in checkout_keywords):
-        if has_phone or "địa chỉ" in msg_lower or "sđt" in msg_lower or "giao" in msg_lower or "ship" in msg_lower:
-            return " (BẮT BUỘC: Khách hàng đang chốt đơn và cung cấp thông tin giao hàng, hãy lập tức trả về JSON 'create_order' với các thông tin đã có. Tuyệt đối không gọi search_product ở lượt này)"
-
-    # 3. Khách nói chốt/mua sản phẩm cụ thể nhưng chưa đưa SĐT/địa chỉ -> Chat xin thông tin giao hàng
-    buy_intent_keywords = ["chốt", "mua", "lấy", "đặt"]
-    if any(kw in msg_lower for kw in buy_intent_keywords):
-        return " (Hãy trò chuyện tự do ở Chế độ 1 để cám ơn khách và lịch sự xin thông tin giao hàng bao gồm họ tên, SĐT, địa chỉ để lên đơn. Tuyệt đối không gọi search_product ở lượt này)"
-
-    # 4. Khách hỏi về thông tin đơn hàng đã đặt
-    if any(kw in msg_lower for kw in order_inquiry_keywords):
-        return " (BẮT BUỘC: Khách đang hỏi về đơn hàng. Hãy trò chuyện tự do ở Chế độ 1, xem lại lịch sử hội thoại để cung cấp thông tin mã đơn hàng, sản phẩm đã đặt. Tuyệt đối KHÔNG gọi search_product ở lượt này)"
-
-    # 5. Tìm kiếm sản phẩm thông thường
-    return " (BẮT BUỘC: Vì đây là câu hỏi tìm kiếm mặt hàng/sản phẩm, bạn phải trả về DUY NHẤT một khối JSON 'search_product' để tra cứu kho. Tuyệt đối không chat tự do ở lượt này)"
+        return call_ollama_api(messages=messages, stream=stream, temperature=temperature)
 
 
 def run_miko_turn(user_message: str, session_id: str, stream: bool = False, on_status = None) -> tuple[str, list]:
@@ -100,10 +78,7 @@ def run_miko_turn(user_message: str, session_id: str, stream: bool = False, on_s
     history = store.get_history(session_id)
     messages = [{"role": "system", "content": MIKO_SYSTEM_PROMPT}]
     messages.extend(history)
-    
-    # Thêm hint helper động cho Llama local dễ chọn đúng chế độ JSON / Chat tự do
-    hint = get_hint(user_message)
-    messages.append({"role": "user", "content": user_message + hint})
+    messages.append({"role": "user", "content": user_message})
 
     final_reply = ""
     tool_calls = 0
@@ -118,7 +93,9 @@ def run_miko_turn(user_message: str, session_id: str, stream: bool = False, on_s
 
         if intent is None:
             # Miko trả lời tự do — đây là reply cuối
-            final_reply = re.sub(r'^(?:Chế độ\s*\d+\s*(?:\([^)]+\))?\s*:\s*)', '', reply, flags=re.IGNORECASE).strip()
+            # Loại bỏ các nhãn chế độ (Chế độ 1, Định dạng 1, (Chế độ 1), v.v.)
+            clean_reply = re.sub(r'\(?(?:Chế độ|Định dạng|Mode)\s*\d+\)?\s*:?', '', reply, flags=re.IGNORECASE)
+            final_reply = clean_reply.strip()
             break
 
         # Miko ra JSON → chạy tool

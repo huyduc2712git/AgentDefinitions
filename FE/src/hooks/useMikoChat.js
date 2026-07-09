@@ -18,7 +18,7 @@ export default function useMikoChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
   const [activeProvider, setActiveProvider] = useState('ollama');
-  const [activeModel, setActiveModel] = useState('llama3.2:latest');
+  const [activeModel, setActiveModel] = useState('qwen2.5:3b');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
 
   // Get current backend configuration

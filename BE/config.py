@@ -12,7 +12,7 @@ NVIDIA_BASE_URL = os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidi
 
 # ─── Ollama (Local LLM) ───
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://localhost:11434/api/chat")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:latest")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
 OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", 180))
 
 # ─── UPOS API ───

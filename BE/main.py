@@ -35,13 +35,15 @@ from pydantic import BaseModel
 class ConfigUpdate(BaseModel):
     llm_provider: str
     nvidia_model: str | None = None
+    model: str | None = None
 
 @app.get("/config", tags=["Config"])
 def get_backend_config():
     import config
+    active_model = config.OLLAMA_MODEL if config.LLM_PROVIDER == "ollama" else config.MINIMAX_MODEL
     return {
         "llm_provider": config.LLM_PROVIDER,
-        "model": config.MINIMAX_MODEL
+        "model": active_model
     }
 
 @app.post("/config", tags=["Config"])
@@ -49,12 +51,18 @@ def update_backend_config(cfg: ConfigUpdate):
     import config
     if cfg.llm_provider in ("ollama", "nvidia"):
         config.LLM_PROVIDER = cfg.llm_provider
-        if cfg.nvidia_model:
-            config.MINIMAX_MODEL = cfg.nvidia_model
+        model_name = cfg.model or cfg.nvidia_model
+        if model_name:
+            if cfg.llm_provider == "ollama":
+                config.OLLAMA_MODEL = model_name
+            else:
+                config.MINIMAX_MODEL = model_name
+        
+        active_model = config.OLLAMA_MODEL if config.LLM_PROVIDER == "ollama" else config.MINIMAX_MODEL
         return {
             "status": "success", 
             "llm_provider": config.LLM_PROVIDER, 
-            "model": config.MINIMAX_MODEL
+            "model": active_model
         }
     return {"status": "error", "message": "Invalid provider"}
 

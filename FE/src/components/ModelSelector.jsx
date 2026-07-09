@@ -38,9 +38,9 @@ export default function ModelSelector({
         <View style={styles.dropdownMenu}>
           <TouchableOpacity
             style={styles.dropdownItem}
-            onPress={() => handleSwitchModel('ollama', 'llama3.2:latest')}
+            onPress={() => handleSwitchModel('ollama', 'qwen2.5:3b')}
           >
-            <Text style={styles.dropdownItemText}>✦ Ollama Local (llama3.2:latest)</Text>
+            <Text style={styles.dropdownItemText}>✦ Ollama Local (qwen2.5:3b)</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.dropdownItem}
