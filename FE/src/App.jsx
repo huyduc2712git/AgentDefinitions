@@ -128,24 +128,17 @@ const styles = StyleSheet.create({
       web: {
         outlineStyle: 'none',
         overflow: 'hidden',
-        // Tràn full màn hình trên mobile browser/PWA
         position: 'fixed',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        // Hỗ trợ Dynamic Viewport Height (tránh bị URL bar che)
         height: '100dvh',
-        // Padding tự động cho notch (top) và safe area (bottom/sides)
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-        paddingLeft: 'env(safe-area-inset-left)',
-        paddingRight: 'env(safe-area-inset-right)',
       },
     }),
   },
   header: {
-    height: 70,
+    minHeight: 70,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -154,6 +147,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 24,
     zIndex: 100,
+    // Header tự "phủ" vào vùng notch (giống WhatsApp, Telegram)
+    ...Platform.select({
+      web: {
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingLeft: 'max(24px, env(safe-area-inset-left))',
+        paddingRight: 'max(24px, env(safe-area-inset-right))',
+      },
+    }),
   },
   headerTitleContainer: {
     flexDirection: 'row',
