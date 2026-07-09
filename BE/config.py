@@ -38,3 +38,8 @@ UPOS_REFRESH_TOKEN = os.environ.get("UPOS_REFRESH_TOKEN", "")
 # ─── Session ───
 SESSION_MAX_HISTORY = 20  # Số lượt tối đa giữ trong history (sliding window)
 TOOL_LOOP_MAX = 3          # Số lần tool-loop tối đa để tránh vòng lặp vô hạn
+
+# ─── Intent Router (Hybrid 2.5 lớp) ───
+# Bật/tắt lớp phân loại ý định (regex + LLM classify + auto-router).
+# Khi tắt: Miko dùng logic cũ (LLM tự parse JSON) — backward compatible.
+ENABLE_INTENT_ROUTER = os.environ.get("ENABLE_INTENT_ROUTER", "true").lower() == "true"

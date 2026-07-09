@@ -8,6 +8,8 @@ from collections import defaultdict
 from threading import Lock
 
 _store: dict[str, list] = defaultdict(list)
+_last_products: dict[str, list] = defaultdict(list)
+_current_product: dict[str, dict] = defaultdict(dict)
 _lock = Lock()
 
 
@@ -15,6 +17,30 @@ def get_history(session_id: str) -> list:
     """Trả về copy của history cho session."""
     with _lock:
         return list(_store[session_id])
+
+
+def save_last_products(session_id: str, products: list) -> None:
+    """Lưu danh sách sản phẩm tìm được gần nhất của session."""
+    with _lock:
+        _last_products[session_id] = list(products)
+
+
+def get_last_products(session_id: str) -> list:
+    """Lấy danh sách sản phẩm tìm được gần nhất của session."""
+    with _lock:
+        return list(_last_products.get(session_id, []))
+
+
+def save_current_product(session_id: str, product: dict) -> None:
+    """Lưu sản phẩm đang được chọn/chốt của session."""
+    with _lock:
+        _current_product[session_id] = dict(product)
+
+
+def get_current_product(session_id: str) -> dict:
+    """Lấy sản phẩm đang được chọn/chốt của session."""
+    with _lock:
+        return dict(_current_product.get(session_id, {}))
 
 
 def save_history(session_id: str, messages: list) -> None:
@@ -56,6 +82,8 @@ def clear_session(session_id: str) -> None:
     """Xoá toàn bộ history của một session."""
     with _lock:
         _store.pop(session_id, None)
+        _last_products.pop(session_id, None)
+        _current_product.pop(session_id, None)
 
 
 def list_sessions() -> list[str]:

@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const BACKEND_URL = typeof window !== 'undefined' 
-  ? `http://${window.location.hostname}:8000` 
-  : 'http://127.0.0.1:8000';
+const BACKEND_URL = 'https://agentdefinitions.onrender.com';
 
 export default function useMikoChat() {
   const [sessionId] = useState(() => 'session_' + Math.random().toString(36).substring(2, 10));
