@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   Platform,
 } from 'react-native';
 
@@ -40,7 +39,7 @@ export default function App() {
   }, [messages, isLoading]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Header Area */}
       <View style={styles.header}>
         <View style={styles.headerTitleContainer}>
@@ -117,22 +116,31 @@ export default function App() {
           </Text>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
+    flex: 1,
     backgroundColor: '#F8F9FA',
     ...Platform.select({
       web: {
         outlineStyle: 'none',
         overflow: 'hidden',
+        // Tràn full màn hình trên mobile browser/PWA
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        // Hỗ trợ Dynamic Viewport Height (tránh bị URL bar che)
+        height: '100dvh',
+        // Padding tự động cho notch (top) và safe area (bottom/sides)
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
       },
     }),
   },
@@ -208,9 +216,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
     paddingHorizontal: 24,
     alignItems: 'center',
+    // Thêm padding bottom cho home indicator (iPhone)
+    ...Platform.select({
+      web: {
+        paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
+      },
+    }),
   },
   inputInnerContainer: {
     width: '100%',
