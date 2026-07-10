@@ -66,3 +66,9 @@ def clear_chat(session_id: str):
 def list_sessions():
     """Debug endpoint: xem tất cả session đang có dữ liệu."""
     return {"sessions": store.list_sessions()}
+
+
+@router.get("/chat/{session_id}/history", summary="Lấy lịch sử cuộc hội thoại")
+def get_chat_history(session_id: str):
+    """Debug endpoint: xem lịch sử của session."""
+    return {"history": store.get_history(session_id)}

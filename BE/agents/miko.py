@@ -14,6 +14,7 @@ import config
 from models.ollama import call_ollama_api
 from models.minimax import call_minimax_api
 from tools.tool_executor import parse_intent, execute
+from tools.address_normalizer import normalize_address
 from session import store
 from agents.prompts import MIKO_SYSTEM_PROMPT
 from agents.intent_router import classify_and_route
@@ -55,12 +56,44 @@ def _build_response_from_products(products: list, tool_result: str, user_message
 def _build_response_from_order(tool_result: str) -> str:
     """
     Khi auto_order được gọi, tạo response từ tool_result.
-    Nếu tool_result chứa lỗi validate → trả lời lịch sự; nếu thành công → chúc mừng.
+    Luôn nhúng tool_result nguyên vẹn để đảm bảo mã đơn hàng được hiển thị.
     """
     if "THÀNH CÔNG" in tool_result:
-        return f"Dạ đơn hàng đã được tạo thành công rồi ạ! 🎉\n{tool_result}\nAnh/chị kiểm tra lại thông tin giúp Miko nha!"
+        return (
+            f"Dạ đơn hàng đã được tạo thành công rồi ạ! 🎉\n\n"
+            f"{tool_result}\n\n"
+            f"Anh/chị kiểm tra lại thông tin giúp Miko nha! Nếu cần hỗ trợ gì thêm em luôn sẵn sàng ạ 🌸"
+        )
     else:
-        return f"Dạ Miko chưa thể tạo đơn ngay ạ. {tool_result} Anh/chị bổ sung thêm thông tin để Miko hoàn tất nha! 🥺"
+        return f"Dạ Miko chưa thể tạo đơn ngay ạ.\n{tool_result}\nAnh/chị bổ sung thêm thông tin để Miko hoàn tất nha! 🥺"
+
+
+def _post_process_address_in_reply(reply: str) -> str:
+    """
+    Tìm dòng địa chỉ trong form xác nhận đơn hàng mà LLM vừa tạo ra
+    và chuẩn hóa nó bằng normalize_address().
+    Áp dụng cho cả định dạng markdown **in đậm** lẫn plaintext.
+    Ví dụ dòng khớp:
+      - **Địa chỉ giao hàng**: 199 DBP, Gia định, hcm
+      - Địa chỉ giao hàng: 199 DBP, Gia định, hcm
+    """
+    # Tìm dòng chứa "Địa chỉ giao hàng:" hoặc "Địa chỉ:" với các bullet point phổ biến (-, •, *)
+    pattern = re.compile(
+        r"(- \*\*Địa chỉ giao hàng\*\*:?\s*|[-•\*]\s*Địa chỉ giao hàng:?\s*)(.*?)(?=\n|$)",
+        re.IGNORECASE
+    )
+    def _replace_addr(m: re.Match) -> str:
+        prefix = m.group(1)
+        raw_addr = m.group(2).strip()
+        # Bỏ qua nếu là placeholder hoặc rỗng
+        if not raw_addr or "(Chưa có)" in raw_addr or "chưa có" in raw_addr.lower():
+            return m.group(0)
+        normalized = normalize_address(raw_addr)
+        if normalized != raw_addr:
+            print(f"[miko] Normalized address in reply: '{raw_addr}' → '{normalized}'")
+        return prefix + normalized
+
+    return pattern.sub(_replace_addr, reply)
 
 
 def is_generic_query(query: str) -> bool:
@@ -134,6 +167,30 @@ def detect_product_number(message: str) -> int | None:
     if re.match(r"^[1-5]$", message_lower):
         return int(message_lower)
         
+    return None
+
+
+def detect_product_by_text(message: str, last_products: list) -> dict | None:
+    """
+    Tìm sản phẩm khớp từ tên trong danh sách sản phẩm gần nhất.
+    """
+    if not last_products:
+        return None
+    msg_lower = message.lower()
+    
+    # Sắp xếp tên dài lên trước để tránh so trùng substring ngắn
+    sorted_prods = sorted(last_products, key=lambda x: len(x.get("product_name") or x.get("name") or ""), reverse=True)
+    
+    for prod in sorted_prods:
+        p_name = prod.get("product_name") or prod.get("name")
+        if not p_name:
+            continue
+        p_name_lower = p_name.lower().strip()
+        # Chuẩn hóa khoảng trắng để so khớp
+        clean_p_name = re.sub(r"\s+", " ", p_name_lower)
+        clean_msg = re.sub(r"\s+", " ", msg_lower)
+        if clean_p_name in clean_msg:
+            return prod
     return None
 
 
@@ -214,13 +271,18 @@ def run_miko_turn(user_message: str, session_id: str, stream: bool = False, on_s
     messages = [{"role": "system", "content": MIKO_SYSTEM_PROMPT}]
     messages.extend(history)
 
-    # Nhận diện lựa chọn sản phẩm bằng số của khách và lưu vào cache sản phẩm đang chọn
+    # Nhận diện lựa chọn sản phẩm của khách và lưu vào cache sản phẩm đang chọn
     num = detect_product_number(user_message)
+    last_products = store.get_last_products(session_id)
     if num:
-        last_products = store.get_last_products(session_id)
         if last_products and 1 <= num <= len(last_products):
             prod = last_products[num - 1]
             store.save_current_product(session_id, prod)
+    else:
+        # Thử nhận diện bằng tên sản phẩm trực tiếp từ message
+        prod_by_text = detect_product_by_text(user_message, last_products)
+        if prod_by_text:
+            store.save_current_product(session_id, prod_by_text)
 
     # Lấy sản phẩm đang chọn từ cache (có thể được lưu từ lượt trước)
     current_prod = store.get_current_product(session_id)
@@ -241,15 +303,171 @@ def run_miko_turn(user_message: str, session_id: str, stream: bool = False, on_s
             f"- Màu sắc: {prod_color}\n"
             f"- Kích thước: {prod_size}\n"
         )
-        if intent == "CREATE_ORDER" or action_type == "auto_order":
-            system_injection += (
-                f"Khách hàng đang chốt đơn cho sản phẩm này. "
-                f"Hãy kiểm tra thông tin giao hàng khách cung cấp bao gồm: Họ tên (customer_name), Số điện thoại (phone), và Địa chỉ giao hàng (address). "
-                f"Nếu thiếu bất kỳ thông tin nào trong ba thông tin này, bạn phải dùng Định dạng 1 để yêu cầu khách hàng cung cấp các thông tin còn thiếu (ví dụ nếu thiếu họ tên, bạn phải xin họ tên). "
-                f"Chỉ khi đã đầy đủ tất cả các thông tin trên, bạn BẮT BUỘC phải trả về DUY NHẤT một khối JSON chứa hành động `create_order` "
-                f"với `product_name` là '{prod_name}', và điền đúng size, màu, sku. "
-                f"Tuyệt đối không chat thêm chữ nào ngoài khối JSON này.]"
-            )
+        # ── Kiểm tra trạng thái chốt đơn ──
+        # Python tự đọc lịch sử để biết đã thu thập được thông tin nào
+        is_checking_out = (
+            intent == "CREATE_ORDER" or
+            action_type == "auto_order" or
+            any("địa chỉ" in h.get("content", "").lower() or
+                "sđt" in h.get("content", "").lower() or
+                "số điện thoại" in h.get("content", "").lower() or
+                "họ tên" in h.get("content", "").lower() or
+                "họ và tên" in h.get("content", "").lower()
+                for h in history[-6:])
+        )
+
+        # Phát hiện khách vừa xác nhận (ok, đúng, đúng rồi, chuẩn, vâng, yes, ...)
+        CONFIRM_WORDS = {
+            "ok", "oke", "okay", "okey", "oki", "đúng", "đúng rồi", "chuẩn",
+            "chuẩn rồi", "xác nhận", "chốt", "vâng", "dạ", "yes", "yep",
+            "đồng ý", "đúng vậy", "đúng đó", "ừ", "ừ nhỉ", "uh", "uh huh",
+        }
+        msg_stripped = user_message.strip().lower().rstrip("!.,")
+        is_customer_confirming = msg_stripped in CONFIRM_WORDS
+
+        if is_checking_out:
+            # Trích xuất thông tin đã thu thập từ lịch sử hội thoại
+            collected_name = ""
+            collected_phone = ""
+            collected_address = ""
+
+            # Quét toàn bộ history để tìm tên/sđt/địa chỉ (ưu tiên mới nhất)
+            all_msgs = history + [{"role": "user", "content": user_message}]
+            for h in reversed(all_msgs):
+                content = h.get("content", "")
+                # Tìm SĐT (10 số, bắt đầu 0[3-9])
+                if not collected_phone:
+                    m = re.search(r'\b0[3-9]\d{8}\b', content)
+                    if m:
+                        collected_phone = m.group(0)
+                # Tìm địa chỉ từ nhãn "Địa chỉ giao hàng:" trong assistant reply
+                if not collected_address and h.get("role") == "assistant":
+                    m = re.search(
+                        r'(?:\*\*)?Địa chỉ giao hàng(?:\*\*)?:?\s*(.+?)(?:\n|$)',
+                        content, re.IGNORECASE
+                    )
+                    if m:
+                        val = m.group(1).strip()
+                        if val and "(chưa có)" not in val.lower():
+                            collected_address = normalize_address(val)
+                # Tìm tên từ nhãn "Họ và tên:" / "Họ tên:" trong assistant reply
+                if not collected_name and h.get("role") == "assistant":
+                    m = re.search(
+                        r'(?:\*\*)?Họ (?:và )?tên(?:\*\*)?:?\s*(.+?)(?:\n|$)',
+                        content, re.IGNORECASE
+                    )
+                    if m:
+                        val = m.group(1).strip()
+                        if val and "(chưa có)" not in val.lower():
+                            collected_name = val
+
+            if not collected_name:
+                # Tên thường là chuỗi chữ cái tiếng Việt không chứa số, dài 2-5 từ
+                # Tìm ngược từ tin nhắn mới nhất
+                NAME_PATTERN = r'([A-ZÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚĂĐĨŨƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴÝỶỸ][a-zàáâãèéêìíòóôõùúăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵýỷỹ]+(?:\s[A-ZÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚĂĐĨŨƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴÝỶỸ][a-zàáâãèéêìíòóôõùúăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵýỷỹ]+){1,4})'
+                for h in reversed(all_msgs):
+                    if h.get("role") != "user":
+                        continue
+                    content = h.get("content", "")
+                    
+                    # Cách 1: Bắt theo prefix "tên (là)", "anh", "chị", "gọi là"
+                    m1 = re.search(rf'(?i)\b(?:tên(?: là)?|gọi(?: là)?|anh|chị|em|mình(?: là)?)\s+{NAME_PATTERN}\b', content)
+                    if m1:
+                        collected_name = m1.group(1).strip()
+                        break
+                        
+                    # Cách 2: Nếu tin nhắn rất ngắn (thường khách nhắn mỗi tên)
+                    text_no_phone = re.sub(r'\b0[3-9]\d{8}\b', '', content).strip(".,! ")
+                    if 1 <= len(text_no_phone.split()) <= 6:
+                        m2 = re.match(rf'^{NAME_PATTERN}$', text_no_phone)
+                        if m2:
+                            collected_name = m2.group(1).strip()
+                            break
+
+            if not collected_address:
+                # Tìm địa chỉ trong user messages (có chứa quận/phường/đường)
+                for h in all_msgs:
+                    if h.get("role") != "user":
+                        continue
+                    content = h.get("content", "")
+                    if any(kw in content.lower() for kw in ["quận", "phường", "huyện", "đường", "tp", "hcm", "hà nội", "dbp", "đbp"]):
+                        # Thử normalize toàn bộ đoạn text sau khi bỏ SĐT và tên
+                        text = re.sub(r'\b0[3-9]\d{8}\b', '', content).strip()
+                        if collected_name:
+                            # Xóa tên đã thu thập khỏi text địa chỉ (cả chữ thường và HOA)
+                            text = re.sub(re.escape(collected_name), '', text, flags=re.IGNORECASE)
+                        # Xóa các từ khóa rác
+                        text = re.sub(r'(?i)\b(tên(?: là)?|sđt|số điện thoại)\b', '', text).strip()
+                        # Xóa các dấu phẩy thừa do xóa text
+                        text = re.sub(r',\s*,', ',', text).strip(', ')
+                        
+                        candidate = normalize_address(text)
+                        if len(candidate) >= 10:
+                            collected_address = candidate
+                            break
+
+            has_all_3 = bool(collected_name and collected_phone and collected_address)
+
+            if has_all_3 and is_customer_confirming:
+                # ── CASE 3: Đủ 3 thông tin + khách vừa confirm → inject create_order JSON trực tiếp ──
+                print(f"[miko] Auto-inject create_order: name={collected_name}, phone={collected_phone}, addr={collected_address}")
+                import json as _json
+                create_order_json = _json.dumps({
+                    "action": "create_order",
+                    "params": {
+                        "customer_name": collected_name,
+                        "phone": collected_phone,
+                        "address": collected_address,
+                        "product_name": prod_name,
+                        "quantity": 1,
+                    }
+                }, ensure_ascii=False)
+                # Bỏ qua LLM loop, set intent trực tiếp
+                intent_obj = parse_intent(create_order_json)
+                tool_result, _ = execute(intent_obj)
+                final_reply = _build_response_from_order(tool_result)
+                if "THÀNH CÔNG" in tool_result:
+                    store.save_current_product(session_id, {})
+                store.append_turn(session_id, user_message, final_reply)
+                return final_reply, found_products
+
+            elif has_all_3:
+                # ── CASE 2: Đủ 3 thông tin, chờ khách confirm ──
+                system_injection += (
+                    f"\n\nKhách đang chốt đơn '{prod_name}'. Đã thu thập đủ thông tin:\n"
+                    f"- Họ tên: {collected_name}\n"
+                    f"- SĐT: {collected_phone}\n"
+                    f"- Địa chỉ: {collected_address}\n\n"
+                    f"Hãy hiển thị lại form xác nhận bên dưới, sau đó hỏi khách nhắn 'OK' để chốt đơn:\n\n"
+                    f"Dạ, thông tin đơn hàng của mình hiện tại là:\n"
+                    f"- **Họ và tên**: {collected_name}\n"
+                    f"- **Số điện thoại**: {collected_phone}\n"
+                    f"- **Địa chỉ giao hàng**: {collected_address}\n\n"
+                    f"Anh/chị kiểm tra lại thông tin trên, nếu chính xác vui lòng nhắn OK để em chốt đơn nha!]"
+                )
+            else:
+                # ── CASE 1: Còn thiếu thông tin → hỏi phần thiếu ──
+                missing = []
+                if not collected_name:
+                    missing.append("Họ và tên")
+                if not collected_phone:
+                    missing.append("Số điện thoại")
+                if not collected_address:
+                    missing.append("Địa chỉ giao hàng")
+
+                filled_summary = (
+                    f"- Họ và tên: {collected_name or '(Chưa có)'}\n"
+                    f"- Số điện thoại: {collected_phone or '(Chưa có)'}\n"
+                    f"- Địa chỉ giao hàng: {collected_address or '(Chưa có)'}"
+                )
+                system_injection += (
+                    f"\n\nKhách đang chốt đơn '{prod_name}'.\n"
+                    f"Thông tin hiện có:\n{filled_summary}\n\n"
+                    f"CÒN THIẾU: {', '.join(missing)}.\n"
+                    f"Hãy hiển thị form tóm tắt trên (thay 'Chưa có' bằng giá trị thật nếu có), "
+                    f"sau đó lịch sự hỏi khách cung cấp: {', '.join(missing)}.]\n"
+                    f"Không hỏi về màu sắc hay kích thước — tên sản phẩm '{prod_name}' đã đủ."
+                )
         else:
             system_injection += (
                 f"Hãy dùng thông tin trên để tư vấn hoặc hướng dẫn khách hàng cách chốt đơn sản phẩm này.]"
@@ -272,6 +490,8 @@ def run_miko_turn(user_message: str, session_id: str, stream: bool = False, on_s
             # Miko trả lời tự do — đây là reply cuối
             # Loại bỏ các nhãn chế độ (Chế độ 1, Định dạng 1, (Chế độ 1), v.v.)
             clean_reply = re.sub(r'\(?(?:Chế độ|Định dạng|Mode)\s*\d+\)?\s*:?', '', reply, flags=re.IGNORECASE)
+            # Chuẩn hóa địa chỉ trong form xác nhận đơn hàng (nếu có)
+            clean_reply = _post_process_address_in_reply(clean_reply)
             final_reply = clean_reply.strip()
             break
 
@@ -290,6 +510,16 @@ def run_miko_turn(user_message: str, session_id: str, stream: bool = False, on_s
                     print(f"[miko] Redirecting generic search query '{query}' to current selected product: '{prod_name}'")
                     params["query"] = prod_name
 
+        # Nếu action là create_order nhưng thiếu product_name, ta lấy từ current_prod cache
+        if intent.get("action") == "create_order":
+            params = intent.setdefault("params", {})
+            if not params.get("product_name") and not params.get("product") and not params.get("name"):
+                current_prod = store.get_current_product(session_id)
+                if current_prod:
+                    prod_name = current_prod.get("name") or current_prod.get("product_name")
+                    if prod_name:
+                        params["product_name"] = prod_name
+
         tool_result, current_products = execute(intent)
         if current_products:
             found_products = current_products
@@ -297,6 +527,15 @@ def run_miko_turn(user_message: str, session_id: str, stream: bool = False, on_s
 
         if on_status:
             on_status("answering", "Miko đang đối chiếu sản phẩm và soạn câu trả lời...")
+
+        # Nếu là create_order: nhúng tool_result trực tiếp vào reply thay vì để LLM viết lại
+        # Điều này đảm bảo mã đơn hàng luôn được hiển thị chính xác
+        if intent and intent.get("action") == "create_order":
+            final_reply = _build_response_from_order(tool_result)
+            # Xóa current_product sau khi tạo đơn thành công
+            if "THÀNH CÔNG" in tool_result:
+                store.save_current_product(session_id, {})
+            break
 
         # Inject tool result vào messages như một system message
         messages.append({"role": "assistant", "content": reply})

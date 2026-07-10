@@ -101,16 +101,17 @@ def execute(intent: dict) -> tuple[str, list]:
 
     elif action == "create_order":
         from services.upos_orders import create_order
-        phone_val = params.get("phone") or params.get("customer_phone", "")
-        address_val = params.get("address") or params.get("customer_address", "")
+        phone_val = params.get("phone") or params.get("customer_phone", "") or params.get("sdt", "")
+        address_val = params.get("address") or params.get("customer_address", "") or params.get("dia_chi", "")
+        prod_name_val = params.get("product_name") or params.get("name") or params.get("product", "") or params.get("ten_san_pham", "")
         res_str = create_order(
-            customer_name=params.get("customer_name", ""),
+            customer_name=params.get("customer_name", "") or params.get("name_customer", "") or params.get("ten_khach_hang", ""),
             phone=phone_val,
             address=address_val,
-            product_name=params.get("product_name", ""),
-            quantity=params.get("quantity", 1),
-            size=params.get("size", ""),
-            color=params.get("color", ""),
+            product_name=prod_name_val,
+            quantity=params.get("quantity", 1) or params.get("so_luong", 1),
+            size=params.get("size", "") or params.get("kich_thuoc", ""),
+            color=params.get("color", "") or params.get("mau_sac", ""),
         )
         return res_str, []
 

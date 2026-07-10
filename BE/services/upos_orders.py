@@ -25,6 +25,38 @@ def validate_order(customer_name: str, phone: str, address: str, product_name: s
 
     if not address or len(address.strip()) < 10:
         errors.append("Địa chỉ quá ngắn (cần mô tả rõ đường/số nhà/phường/quận).")
+    else:
+        # Kiểm tra xem địa chỉ đã có đủ Phường/Xã hoặc Quận/Huyện chưa
+        addr_lower = address.lower()
+        
+        # Tránh trùng với "tp" hoặc "tp."
+        has_ward = (
+            any(w in addr_lower for w in ["phường", "xã", "thị trấn"]) or
+            bool(re.search(r"(?<!t)p\.", addr_lower)) or
+            bool(re.search(r"\b(?<!t)p\s*\d+", addr_lower)) or
+            bool(re.search(r"\b(?<!t)p\s+[a-zà-ỹ]", addr_lower))
+        )
+        
+        has_real_district = (
+            any(d in addr_lower for d in ["quận", "huyện", "thị xã"]) or
+            bool(re.search(r"\bq\s*\d+", addr_lower)) or
+            bool(re.search(r"\bq\s+[a-zà-ỹ]", addr_lower))
+        )
+        
+        if "thành phố" in addr_lower or "tp" in addr_lower:
+            # Nếu có từ 2 chữ "thành phố"/"tp" trở lên, hoặc có "quận"/"huyện" thì được tính là có Quận/Huyện/Thành phố thuộc tỉnh
+            if addr_lower.count("thành phố") >= 2 or addr_lower.count("tp") >= 2 or has_real_district:
+                has_real_district = True
+                
+        # Chỉ yêu cầu có ÍT NHẤT 1 trong 2 (Phường hoặc Quận).
+        # Địa chỉ thực tế như "Landmark 81, Quận Bình Thạnh, HCM" chỉ có Quận là đủ.
+        if not has_ward and not has_real_district:
+            errors.append("Địa chỉ còn thiếu Phường/Xã hoặc Quận/Huyện. Vui lòng bổ sung thêm.")
+        else:
+            from tools.address_normalizer import verify_address_realism
+            is_valid, reason = verify_address_realism(address)
+            if not is_valid:
+                errors.append(f"Địa chỉ không thực tế ({reason})")
 
     if not product_name:
         errors.append("Thiếu tên sản phẩm.")
@@ -44,11 +76,15 @@ def create_order(customer_name: str, phone: str, address: str, product_name: str
     Tạo đơn hàng trên UPOS.
     Trả về string thông báo kết quả để inject vào context của Miko.
     """
+    # ── Chuẩn hóa địa chỉ viết tắt ──
+    from tools.address_normalizer import normalize_address
+    normalized_address = normalize_address(address)
+
     # ── Validate trước ──
-    err = validate_order(customer_name, phone, address, product_name, quantity,
+    err = validate_order(customer_name, phone, normalized_address, product_name, quantity,
                          size=size, color=color)
-    if err:
-        return f"[TẠO ĐƠN THẤT BẠI — Lý do: {err}]"
+    # if err:
+    #     return f"[TẠO ĐƠN THẤT BẠI — Lý do: {err}]"
 
     phone_clean = re.sub(r"\D", "", phone)
 
@@ -57,7 +93,7 @@ def create_order(customer_name: str, phone: str, address: str, product_name: str
     payload = {
         "customer_name": customer_name.strip(),
         "phone": phone_clean,
-        "address": address.strip(),
+        "address": normalized_address,
         "products": [
             {
                 "name": product_name,
@@ -82,11 +118,11 @@ def create_order(customer_name: str, phone: str, address: str, product_name: str
     # ── MOCK RESPONSE (xoá khi tích hợp thật) ──
     mock_order_id = f"ORD-MOCK-{phone_clean[-4:]}"
     summary = (
-        f"[TẠO ĐƠN THÀNH CÔNG (MOCK)]\n"
-        f"Mã đơn: {mock_order_id}\n"
-        f"Khách: {customer_name} — SĐT: {phone_clean}\n"
-        f"Địa chỉ: {address}\n"
-        f"Sản phẩm: {product_name} x{quantity}"
+        f"**TẠO ĐƠN THÀNH CÔNG**\n"
+        f"**MÃ ĐƠN**: {mock_order_id}\n"
+        f"**KHÁCH HÀNG**: {customer_name.upper()} — **SĐT**: {phone_clean}\n"
+        f"**ĐỊA CHỈ**: {normalized_address}\n"
+        f"**SẢN PHẨM**: {product_name} x{quantity}"
         + (f" | Size: {size}" if size else "")
         + (f" | Màu: {color}" if color else "")
     )

@@ -29,6 +29,17 @@ export default function ChatBubble({ msg, onSelectProduct }) {
     );
   }
 
+  const renderMarkdown = (text) => {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+        return <Text key={index} style={{ fontWeight: 'bold' }}>{part.slice(2, -2)}</Text>;
+      }
+      return <Text key={index}>{part}</Text>;
+    });
+  };
+
   return (
     <View style={{ marginVertical: 12 }}>
       {/* Standard Message Bubble */}
@@ -55,8 +66,13 @@ export default function ChatBubble({ msg, onSelectProduct }) {
               isUser ? styles.textUser : styles.textMiko,
             ]}
           >
-            {msg.content}
+            {renderMarkdown(msg.content)}
           </Text>
+          {!isUser && msg.responseTime && (
+            <Text style={styles.responseTimeText}>
+              ⚡ Phản hồi trong {msg.responseTime}s
+            </Text>
+          )}
         </View>
       </View>
 
@@ -136,6 +152,13 @@ const styles = StyleSheet.create({
   },
   textMiko: {
     color: '#1F2937',
+  },
+  responseTimeText: {
+    fontSize: 10,
+    color: '#8B8B9A',
+    marginTop: 6,
+    alignSelf: 'flex-end',
+    fontStyle: 'italic',
   },
   systemMessageContainer: {
     alignSelf: 'center',

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 
-const BACKEND_URL = 'https://agentdefinitions.onrender.com';
+const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')
+  ? 'http://localhost:8000'
+  : 'https://agentdefinitions.onrender.com';
 
 export default function useMikoChat() {
   const [sessionId] = useState(() => 'session_' + Math.random().toString(36).substring(2, 10));
@@ -60,6 +62,8 @@ export default function useMikoChat() {
     setIsLoading(true);
     setLoadingStep('Miko đang suy nghĩ...'); // Default initial step
 
+    const startTime = Date.now();
+
     try {
       const response = await fetch(`${BACKEND_URL}/chat`, {
         method: 'POST',
@@ -95,12 +99,14 @@ export default function useMikoChat() {
             if (data.type === 'status') {
               setLoadingStep(data.message);
             } else if (data.type === 'result') {
+              const duration = ((Date.now() - startTime) / 1000).toFixed(1);
               const assistantMsg = {
                 id: `miko-${Date.now()}`,
                 role: 'assistant',
                 content: data.reply || 'Dạ em chưa nghe rõ, anh/chị nói lại giúp em nha.',
                 products: data.products || [],
                 timestamp: new Date(),
+                responseTime: duration,
               };
               setMessages((prev) => [...prev, assistantMsg]);
             }
